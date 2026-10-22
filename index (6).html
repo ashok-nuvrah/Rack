@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0b5cff">
+<title>Nuvrah Stock-Scan</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--pri:#0b5cff;--bg:#f3f5f9;--card:#fff;--txt:#1a2233;--mut:#6b7587;--bd:#dde2ec;--ok:#12805c;--err:#c8281e}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt);font-size:16px}
+.hide{display:none!important}
+header{background:var(--pri);color:#fff;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20}
+header b{font-size:18px}
+header .who{display:inline-block;margin-top:3px;background:rgba(255,255,255,.2);padding:2px 10px;border-radius:20px;font-size:13px;font-weight:700}
+header button{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:8px;padding:8px 12px;font-size:14px}
+nav{display:flex;background:#fff;border-bottom:1px solid var(--bd);position:sticky;top:60px;z-index:19;overflow-x:auto}
+nav button{flex:1;padding:13px 6px;border:0;background:none;font-size:14px;white-space:nowrap;color:var(--mut);border-bottom:3px solid transparent;font-weight:600}
+nav button.on{color:var(--pri);border-color:var(--pri)}
+main{padding:12px;max-width:640px;margin:0 auto}
+.card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(20,30,60,.08)}
+label{display:block;font-size:13px;font-weight:700;color:var(--mut);margin:0 0 5px;text-transform:uppercase;letter-spacing:.3px}
+input[type=text],input[type=password],textarea{width:100%;padding:12px;border:1.5px solid var(--bd);border-radius:10px;font-size:16px;background:#fff;color:var(--txt)}
+input:focus,textarea:focus{outline:none;border-color:var(--pri)}
+input:disabled{background:#eef0f5}
+textarea{min-height:90px;resize:vertical}
+select{width:100%;padding:12px;border:1.5px solid var(--bd);border-radius:10px;font-size:16px;background:#fff;color:var(--txt)}
+select:focus{outline:none;border-color:var(--pri)}
+.row{display:flex;gap:8px}.row>*{flex:1}.row>.fit{flex:0 0 auto}
+.btn{border:0;border-radius:10px;padding:12px 16px;font-size:16px;font-weight:700;background:var(--pri);color:#fff}
+.btn.sec{background:#e6ecff;color:var(--pri)}.btn.red{background:#fde8e6;color:var(--err)}.btn.grn{background:var(--ok)}
+.btn:disabled{opacity:.45}
+.btn.full{width:100%}
+.gap{height:12px}
+.combo{position:relative}
+.combo ul{position:absolute;left:0;right:0;top:100%;margin:4px 0 0;padding:0;list-style:none;background:#fff;border:1.5px solid var(--bd);border-radius:10px;max-height:240px;overflow:auto;z-index:15;box-shadow:0 8px 20px rgba(0,0,0,.12)}
+.combo li{padding:12px;border-bottom:1px solid #f0f2f7}.combo li:active{background:#e6ecff}
+.combo li.none{color:var(--mut)}
+.reader{width:100%;border-radius:10px;overflow:hidden;margin-top:10px;background:#000}
+.list{margin:10px 0 0;padding:0;list-style:none;max-height:300px;overflow:auto}
+.list li{display:flex;justify-content:space-between;align-items:center;padding:9px 10px;border-bottom:1px solid #eef0f5;font-family:ui-monospace,Menlo,monospace}
+.list li button{border:0;background:#fde8e6;color:var(--err);border-radius:8px;width:32px;height:32px;font-size:18px}
+.total{font-size:20px;font-weight:800;text-align:center;padding:6px 0}
+.hint{font-size:13px;color:var(--mut);margin-top:6px}
+.res{border-left:5px solid var(--ok)}.res.nf{border-left-color:var(--err)}
+.res h4{margin:0 0 6px;font-family:ui-monospace,Menlo,monospace;font-size:17px}
+.res dl{margin:0;display:grid;grid-template-columns:90px 1fr;gap:3px 8px}.res dt{color:var(--mut)}.res dd{margin:0;font-weight:700}
+table{width:100%;border-collapse:collapse}td,th{padding:8px 4px;border-bottom:1px solid #eef0f5;text-align:left;font-size:14px}
+.modal{position:fixed;inset:0;background:rgba(10,15,30,.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+.modal .box{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:340px;text-align:center}
+.modal h2{margin:0 0 8px}.modal .code{font-family:ui-monospace,Menlo,monospace;font-size:18px;font-weight:700;margin:8px 0 16px;word-break:break-all}
+.modal.dup h2{color:var(--err);font-size:28px}
+.modal .big{font-size:54px;font-weight:800;color:var(--ok);line-height:1}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1a2233;color:#fff;padding:11px 18px;border-radius:24px;z-index:200;font-size:14px;max-width:90%;text-align:center}
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+#login .card{width:100%;max-width:360px;padding:24px}
+#login h1{margin:0 0 4px;color:var(--pri);font-size:26px}
+.err{color:var(--err);font-size:14px;margin-top:10px;min-height:18px}
+.chk{display:flex;align-items:center;gap:8px;font-size:15px;margin:10px 0}
+.chk input{width:20px;height:20px}
+.pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:20px;background:#e6f6ef;color:var(--ok);font-weight:700}
+.pill.off{background:#fde8e6;color:var(--err)}
+.mono{font-family:ui-monospace,Menlo,monospace}
+.mut{color:var(--mut);font-size:12px}
+#stTable th{font-size:12px;color:var(--mut);text-transform:uppercase}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="card">
+    <h1>Nuvrah Stock-Scan</h1>
+    <div class="hint" style="margin:0 0 16px">Sign in to continue</div>
+    <label>Username</label><input type="text" id="lu" autocapitalize="none" autocomplete="username">
+    <div class="gap"></div>
+    <label>Password</label><input type="password" id="lp" autocomplete="current-password">
+    <div class="gap"></div>
+    <button class="btn full" id="lbtn">Login</button>
+    <div class="err" id="lerr"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hide">
+  <header>
+    <div><b>Nuvrah Stock-Scan</b><br><span class="who" id="who"></span></div>
+    <button id="logout">Logout</button>
+  </header>
+  <nav>
+    <button data-tab="scan" id="tab-scan">Scan</button>
+    <button data-tab="details" id="tab-details">Rack Details</button>
+    <button data-tab="storage" id="tab-storage">Rack Storage</button>
+    <button data-tab="users" id="tab-users" class="hide">Users</button>
+  </nav>
+
+  <main>
+    <!-- SCAN TAB -->
+    <section id="p-scan" class="hide">
+      <div class="card">
+        <label>1. Rack Number</label>
+        <div class="combo">
+          <input type="text" id="rackIn" placeholder="Search / select rack" autocomplete="off">
+          <ul id="rackList" class="hide"></ul>
+        </div>
+        <div class="gap"></div>
+        <label>2. Asked By</label>
+        <input type="text" id="askIn" placeholder="Name" autocapitalize="characters" autocomplete="off">
+        <div class="hint" id="step3hint">Select a rack and enter Asked By to start scanning.</div>
+      </div>
+
+      <div class="card">
+        <label>3. Barcode</label>
+        <input type="text" id="codeIn" placeholder="Scan, type or paste codes" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done" disabled>
+        <div class="hint">Scanner / camera scans are added automatically. You can paste many codes from Excel at once. For typing, press Enter.</div>
+        <div class="gap"></div>
+        <button class="btn sec full" id="camBtn1" disabled>📷 Scan with Camera</button>
+        <button class="btn sec full photoBtn hide" id="photoBtn1" style="margin-top:8px" disabled>📸 Take photo to scan</button>
+        <div id="reader1" class="reader hide"></div>
+      </div>
+
+      <div class="card">
+        <div class="total">Total: <span id="cnt">0</span></div>
+        <ul class="list" id="codeList"></ul>
+        <div class="gap"></div>
+        <div class="row">
+          <button class="btn red fit" id="clearBtn">Clear</button>
+          <button class="btn grn" id="saveBtn" disabled>Save to Sheet</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAILS TAB -->
+    <section id="p-details" class="hide">
+      <div class="card">
+        <label>Search by</label>
+        <select id="dMode">
+          <option value="exact" selected>Entire code</option>
+          <option value="contains">Part of code (contains)</option>
+          <option value="starts">Starts with</option>
+          <option value="ends">Ends with</option>
+        </select>
+        <div class="gap"></div>
+        <label>Barcode(s)</label>
+        <textarea id="dIn" placeholder="Type or paste one or more barcodes (one per line or comma separated)"></textarea>
+        <div class="gap"></div>
+        <div class="row">
+          <button class="btn sec" id="camBtn2">📷 Scan</button>
+          <button class="btn" id="fetchBtn">Fetch Details</button>
+        </div>
+        <button class="btn sec full photoBtn hide" id="photoBtn2" style="margin-top:8px">📸 Take photo to scan</button>
+        <div id="reader2" class="reader hide"></div>
+        <div class="gap"></div>
+        <div class="row">
+          <button class="btn red fit" id="dClear">Clear</button>
+          <button class="btn grn" id="exportBtn" disabled>⬇ Export to Excel</button>
+        </div>
+        <div class="hint" id="dCount"></div>
+      </div>
+      <div id="dRes"></div>
+    </section>
+
+    <!-- STORAGE TAB -->
+    <section id="p-storage" class="hide">
+      <div class="card">
+        <label>Rack Number</label>
+        <div class="combo">
+          <input type="text" id="stRackIn" placeholder="Search / select rack" autocomplete="off">
+          <ul id="stRackList" class="hide"></ul>
+        </div>
+        <div class="hint">Shows every barcode whose latest scan is in this rack.</div>
+        <div class="gap"></div>
+        <input type="text" id="stFilter" placeholder="Filter results (barcode / asked by)" autocomplete="off">
+        <div class="gap"></div>
+        <div class="row">
+          <button class="btn sec" id="stRefresh">↻ Refresh</button>
+          <button class="btn grn" id="stExport" disabled>⬇ Export to Excel</button>
+        </div>
+        <div class="hint" id="stCount"></div>
+      </div>
+      <div class="card hide" id="stTable">
+        <table>
+          <thead><tr><th>#</th><th>Barcode</th><th>Date / Time</th><th>Asked by / User</th></tr></thead>
+          <tbody id="stBody"></tbody>
+        </table>
+        <div class="hint" id="stMore"></div>
+      </div>
+    </section>
+
+    <!-- USERS TAB -->
+    <section id="p-users" class="hide">
+      <div class="card">
+        <label>Add user</label>
+        <input type="text" id="nuName" placeholder="Username" autocapitalize="none">
+        <div class="gap"></div>
+        <input type="text" id="nuPass" placeholder="Password" autocapitalize="none">
+        <label class="chk"><input type="checkbox" id="nuWrite" checked> Write access (can scan &amp; save)</label>
+        <button class="btn full" id="nuBtn">Create user</button>
+      </div>
+      <div class="card">
+        <label>Users</label>
+        <table><tbody id="uBody"></tbody></table>
+        <div class="hint">Users without write access can only use the Rack Details tab.</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<input type="file" accept="image/*" capture="environment" id="photoIn" class="hide">
+<div id="fileReader" class="hide"></div>
+<div id="modalHost"></div>
+<div id="toast" class="hide"></div>
+
+<script>
+/* ============ CONFIG ============ */
+let API_URL = 'https://script.google.com/macros/s/AKfycbzrv_AB2k22kVkN0mB6bBxcgkUUw7_mdkTcecaAc_p9lJf-ODwDV6MNe_PgvMLdkfqT/exec';
+/* ================================= */
+
+if(!API_URL){ API_URL = localStorage.getItem('rs_api') || ''; }
+if(!API_URL){
+  const v = prompt('Enter the Apps Script Web App URL (ends with /exec):');
+  if(v){ API_URL = v.trim(); localStorage.setItem('rs_api', API_URL); }
+}
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let token = localStorage.getItem('rs_tok') || '';
+let me = null, racks = [];
+let rack = '', codes = [];
+
+/* ---------- helpers ---------- */
+function toast(msg, ms=2200){ const t=$('toast'); t.textContent=msg; t.classList.remove('hide'); clearTimeout(toast.t); toast.t=setTimeout(()=>t.classList.add('hide'),ms); }
+let actx;
+function beep(ok=true){
+  try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(), g=actx.createGain(); o.connect(g); g.connect(actx.destination);
+    o.frequency.value = ok?1000:300; g.gain.value=.15; o.start(); o.stop(actx.currentTime+(ok?.08:.4));
+    if(!ok && navigator.vibrate) navigator.vibrate([200,80,200]); }catch(e){}
+}
+function norm(c){ return String(c||'').trim().toUpperCase(); }
+async function api(action, data={}){
+  if(!API_URL) throw new Error('API URL not set');
+  const r = await fetch(API_URL, {method:'POST', body: JSON.stringify(Object.assign({action, token}, data))});
+  const j = await r.json();
+  if(!j.ok){ if(j.error==='AUTH'){ doLogout(true); throw new Error('Session expired. Please login again.'); } throw new Error(j.error||'Error'); }
+  return j;
+}
+function modal(html, cls=''){
+  const m=document.createElement('div'); m.className='modal '+cls; m.innerHTML='<div class="box">'+html+'</div>';
+  $('modalHost').appendChild(m); return m;
+}
+function closeModal(m){ if(m.isConnected){ m.remove(); if(!scanner && !$('p-scan').classList.contains('hide') && !$('codeIn').disabled) $('codeIn').focus(); } }
+
+/* ---------- login ---------- */
+$('lbtn').onclick = async () => {
+  $('lerr').textContent=''; $('lbtn').disabled=true;
+  try{
+    const j = await api('login',{username:$('lu').value, password:$('lp').value});
+    token=j.token; localStorage.setItem('rs_tok',token); me=j.user; await startApp();
+    toast('Welcome, '+me.username);
+  }catch(e){ $('lerr').textContent=e.message; }
+  $('lbtn').disabled=false;
+};
+$('lp').addEventListener('keydown',e=>{ if(e.key==='Enter') $('lbtn').click(); });
+function doLogout(silent){
+  stopScan(); token=''; localStorage.removeItem('rs_tok'); me=null; codes=[]; rack=''; renderCodes(); scanCombo.set(''); stCombo.set(''); stRack=''; stItems=[]; renderStorage();
+  $('app').classList.add('hide'); $('login').classList.remove('hide'); $('lp').value='';
+  if(silent!==true) toast('Logged out');
+}
+$('logout').onclick = () => doLogout();
+
+async function startApp(){
+  $('login').classList.add('hide'); $('app').classList.remove('hide');
+  $('who').textContent = '👤 ' + me.username + (me.admin?' · Admin':(me.write?'':' · Read only'));
+  $('tab-scan').classList.toggle('hide', !me.write);
+  $('tab-users').classList.toggle('hide', !me.admin);
+  try{ racks = (await api('racks')).racks; }catch(e){ toast(e.message,4000); }
+  showTab(me.write ? 'scan' : 'details');
+  if(me.admin) loadUsers();
+}
+(async()=>{ if(token && API_URL){ try{ me=(await api('me')).user; await startApp(); }catch(e){} } })();
+
+/* ---------- tabs ---------- */
+function showTab(t){
+  stopScan();
+  ['scan','details','storage','users'].forEach(x=>{ $('p-'+x).classList.toggle('hide',x!==t); $('tab-'+x).classList.toggle('on',x===t); });
+  if(t==='users') loadUsers();
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+
+/* ---------- camera scanner ---------- */
+let scanner=null, scanBtn=null, lastC='', lastT=0, onScan=null;
+async function stopScan(){
+  if(scanner){ try{ await scanner.stop(); }catch(e){} try{ scanner.clear(); }catch(e){} scanner=null; }
+  ['reader1','reader2'].forEach(i=>$(i).classList.add('hide'));
+  if(scanBtn){ scanBtn.textContent = scanBtn.dataset.label; scanBtn=null; }
+}
+async function toggleScan(btn, readerId, cb){
+  if(scanner && scanBtn===btn){ await stopScan(); return; }
+  await stopScan();
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ showPhotoBtns(); toast('Live camera is not available on this page. Use "Take photo to scan".',6000); return; }
+  if(typeof Html5Qrcode==='undefined'){ toast('Scanner library not loaded (check internet)'); return; }
+  btn.dataset.label = btn.dataset.label || btn.textContent;
+  scanBtn=btn; onScan=cb; btn.textContent='⏹ Stop Camera';
+  $(readerId).classList.remove('hide');
+  const F = Html5QrcodeSupportedFormats;
+  scanner = new Html5Qrcode(readerId, {
+    formatsToSupport:[F.CODE_128,F.CODE_39,F.CODE_93,F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.ITF,F.CODABAR,F.QR_CODE,F.DATA_MATRIX],
+    experimentalFeatures:{useBarCodeDetectorIfSupported:true}, verbose:false
+  });
+  try{
+    await scanner.start({facingMode:'environment'},
+      {fps:10, qrbox:(w,h)=>({width:Math.floor(w*.9), height:Math.floor(Math.min(h,w)*.5)})},
+      txt=>{
+        const c=norm(txt), now=Date.now();
+        if(c===lastC && now-lastT<3000){ lastT=now; return; }   // same code held in view
+        lastC=c; lastT=now; if(document.querySelector('.modal')) return;
+        onScan(c,true);
+      }, ()=>{});
+  }catch(e){
+    showPhotoBtns();
+    const m=String(e&&e.message||e);
+    toast(/NotAllowed|Permission|denied/i.test(m)
+      ? 'Live camera is blocked on this page. Tap "Take photo to scan" below, or save this file to the phone and open it in Chrome (Downloads) to use the live camera.'
+      : 'Camera error: '+m, 8000);
+    await stopScan();
+  }
+}
+
+/* ---------- SCAN TAB: rack dropdown with search ---------- */
+function makeCombo(inpId, ulId, onChange){
+  const inp=$(inpId), ul=$(ulId); let val='';
+  function render(){
+    const q=inp.value.trim().toLowerCase();
+    const items=racks.filter(r=>r.toLowerCase().includes(q));
+    ul.innerHTML = items.length ? items.map(r=>'<li data-v="'+esc(r)+'">'+esc(r)+'</li>').join('') : '<li class="none">No match</li>';
+    ul.classList.remove('hide');
+  }
+  inp.addEventListener('focus',()=>{ inp.select(); render(); });
+  inp.addEventListener('input',()=>{ if(val){ val=''; onChange(''); } render(); });
+  ul.addEventListener('click',e=>{
+    const li=e.target.closest('li'); if(!li||!li.dataset.v) return;
+    val=li.dataset.v; inp.value=val; ul.classList.add('hide'); onChange(val);
+  });
+  document.addEventListener('click',e=>{ if(!inp.parentElement.contains(e.target)){ ul.classList.add('hide'); inp.value=val; } });
+  return { get:()=>val, set:v=>{ val=v; inp.value=v; } };
+}
+const scanCombo=makeCombo('rackIn','rackList',v=>{
+  rack=v; refreshReady();
+  if(v) setTimeout(()=>{ if(!$('askIn').value) $('askIn').focus(); else $('codeIn').focus(); },50);
+});
+$('askIn').addEventListener('input',refreshReady);
+$('askIn').addEventListener('keydown',e=>{ if(e.key==='Enter'&&ready()){ e.preventDefault(); $('codeIn').focus(); } });
+function ready(){ return !!rack && $('askIn').value.trim().length>0; }
+function refreshReady(){
+  const r=ready();
+  ['codeIn','camBtn1','photoBtn1'].forEach(i=>$(i).disabled=!r);
+  $('step3hint').textContent = r ? 'Ready. Scan or type barcodes below.' : 'Select a rack and enter Asked By to start scanning.';
+  $('saveBtn').disabled = !(r && codes.length);
+  if(!r && scanner) stopScan();
+}
+
+/* ---------- SCAN TAB: codes ---------- */
+function renderCodes(){
+  $('cnt').textContent=codes.length;
+  $('codeList').innerHTML = codes.slice().reverse().map((c,i)=>'<li><span>'+esc(c)+'</span><button data-i="'+(codes.length-1-i)+'">×</button></li>').join('');
+  $('saveBtn').disabled = !(ready() && codes.length);
+}
+$('codeList').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; codes.splice(+b.dataset.i,1); renderCodes(); };
+
+const ci=$('codeIn'); let keyTimes=[], autoT=null;
+const MAX_CODES=5000;
+function parseCodes(t){ return String(t||'').split(/[\s,;|]+/).map(norm).filter(Boolean); }
+function addCode(raw, noSplit){
+  clearTimeout(autoT); ci.value=''; keyTimes=[];
+  const list = noSplit ? [norm(raw)].filter(Boolean) : parseCodes(raw);
+  if(!list.length) return;
+  if(!ready()){ toast('Select rack and Asked By first'); return; }
+  const have=new Set(codes), dupSet=new Set(); let added=0, capped=false;
+  for(const c of list){
+    if(have.has(c)){ dupSet.add(c); continue; }
+    if(codes.length>=MAX_CODES){ capped=true; break; }
+    codes.push(c); have.add(c); added++;
+  }
+  renderCodes();
+  if(dupSet.size){
+    beep(false);
+    const d=[...dupSet];
+    if(list.length===1){
+      const m=modal('<h2>Repeat code</h2><div class="code">'+esc(d[0])+'</div><button class="btn full" id="dupOk">OK</button>','dup');
+      const close=()=>closeModal(m);
+      m.querySelector('#dupOk').onclick=close;
+      setTimeout(close,2000);                     // auto-dismiss so continuous scanning is not blocked
+    }else{
+      const m=modal('<h2>Repeat code</h2><div class="hint">'+d.length+' repeated &middot; '+added+' new added</div>'+
+        '<div class="code" style="max-height:180px;overflow:auto;font-size:14px;text-align:left">'+d.slice(0,100).map(esc).join('<br>')+(d.length>100?'<br>&hellip;':'')+'</div>'+
+        '<button class="btn full" id="dupOk">OK</button>','dup');
+      m.querySelector('#dupOk').onclick=()=>closeModal(m);
+    }
+  }else if(added){ beep(true); if(list.length>1) toast(added+' codes added'); }
+  if(capped) toast('Limit of '+MAX_CODES+' codes reached. Save first.',4000);
+}
+// Camera scans add straight away (no splitting)
+function addFromCamera(c){ addCode(c,true); }
+
+// Paste (e.g. a column copied from Excel): split into separate codes and add all at once
+ci.addEventListener('paste',e=>{
+  const cd=e.clipboardData||window.clipboardData; const t=cd?cd.getData('text'):'';
+  if(!t) return; e.preventDefault(); addCode(t);
+});
+// Typing / hardware scanner: Enter or Tab adds
+ci.addEventListener('keydown',e=>{
+  if((e.key==='Enter'||e.key==='Tab'||e.keyCode===13) && ci.value.trim()){ e.preventDefault(); addCode(ci.value); }
+});
+// Scanner without Enter suffix: detect a fast burst of characters, then add after a short pause
+ci.addEventListener('input',e=>{
+  const now=Date.now(); keyTimes.push(now); if(keyTimes.length>60) keyTimes.shift();
+  clearTimeout(autoT);
+  const v=ci.value;
+  if(/[\s,;|]/.test(v.trim())){ autoT=setTimeout(()=>addCode(ci.value),60); return; }   // several codes arrived together
+  if(v.length>=4 && keyTimes.length>=v.length){
+    const seg=keyTimes.slice(-v.length);
+    const avg=(seg[seg.length-1]-seg[0])/(seg.length-1);
+    if(avg<50) autoT=setTimeout(()=>addCode(ci.value),150);   // human typing is far slower than 50 ms/char
+  }
+});
+$('camBtn1').onclick=()=>toggleScan($('camBtn1'),'reader1',addFromCamera);
+$('clearBtn').onclick=()=>{ if(codes.length && !confirm('Clear all '+codes.length+' scanned codes?')) return; codes=[]; renderCodes(); };
+
+$('saveBtn').onclick=async()=>{
+  if(!ready()||!codes.length) return;
+  $('saveBtn').disabled=true; $('saveBtn').textContent='Saving…';
+  try{
+    const j=await api('save',{rack, askedBy:$('askIn').value.trim(), codes});
+    const m=modal('<div class="big">'+j.saved+'</div><h2>Total saved</h2><div class="hint" style="margin-bottom:16px">Rack: '+esc(rack)+'</div><button class="btn full" id="svOk">OK</button>');
+    m.querySelector('#svOk').onclick=()=>closeModal(m);
+    codes=[]; renderCodes(); stopScan();
+  }catch(e){ toast(e.message,4000); }
+  $('saveBtn').textContent='Save to Sheet'; $('saveBtn').disabled=!(ready()&&codes.length);
+};
+
+/* ---------- photo scan (works even when the live camera is blocked) ---------- */
+let photoCb=null;
+function showPhotoBtns(){ document.querySelectorAll('.photoBtn').forEach(b=>b.classList.remove('hide')); }
+if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) showPhotoBtns();
+async function decodePhoto(file){
+  if('BarcodeDetector' in window){
+    try{ const r=await new BarcodeDetector().detect(await createImageBitmap(file)); if(r.length) return r.map(x=>x.rawValue); }catch(e){}
+  }
+  if(typeof Html5Qrcode==='undefined') throw new Error('Scanner library not loaded (check internet)');
+  const F=Html5QrcodeSupportedFormats;
+  const q=new Html5Qrcode('fileReader',{formatsToSupport:[F.CODE_128,F.CODE_39,F.CODE_93,F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.ITF,F.CODABAR,F.QR_CODE,F.DATA_MATRIX],verbose:false});
+  try{ return [await q.scanFile(file,false)]; } finally{ try{ q.clear(); }catch(e){} }
+}
+$('photoIn').addEventListener('change',async e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value=''; if(!f||!photoCb) return;
+  toast('Reading photo…',1500);
+  let list=[];
+  try{ list=(await decodePhoto(f)).map(norm).filter(Boolean); }catch(err){}
+  if(!list.length){ beep(false); toast('No barcode found. Retake the photo closer, with the barcode flat and in focus.',4500); return; }
+  photoCb(list);
+});
+$('photoBtn1').onclick=()=>{ photoCb=list=>list.forEach(c=>addCode(c,true)); $('photoIn').click(); };
+$('photoBtn2').onclick=()=>{ photoCb=list=>{ beep(true); lookup(list,'exact'); }; $('photoIn').click(); };
+
+/* ---------- DETAILS TAB ---------- */
+const found = new Map();
+function renderRes(){
+  const arr=[...found.values()].reverse();
+  $('dRes').innerHTML = arr.map(r=> r.found
+    ? '<div class="card res"><h4>'+esc(r.code)+'</h4><dl><dt>Date</dt><dd>'+esc(r.date)+'</dd><dt>Rack</dt><dd>'+esc(r.rack)+'</dd><dt>Asked by</dt><dd>'+esc(r.askedBy)+'</dd></dl></div>'
+    : '<div class="card res nf"><h4>'+esc(r.code)+'</h4><div style="color:var(--err);font-weight:700">Not found in Scan sheet</div></div>').join('');
+  $('exportBtn').disabled = !found.size;
+  $('dCount').textContent = found.size ? (found.size+' barcode(s) fetched') : '';
+}
+async function lookup(list, mode){
+  mode=mode||'exact';
+  list=[...new Set(list.map(norm).filter(Boolean))]; if(!list.length){ toast('Enter a barcode'); return; }
+  if(mode!=='exact'){
+    const ok=list.filter(t=>t.length>=3);
+    if(ok.length<list.length) toast('Part search needs at least 3 characters');
+    list=ok; if(!list.length) return;
+  }
+  $('fetchBtn').disabled=true; $('fetchBtn').textContent='Fetching…';
+  try{
+    const j=await api('lookup',{codes:list,mode});
+    j.results.forEach(r=>{ found.delete(r.code); found.set(r.code,r); }); renderRes();
+    if(j.truncated) toast('Too many matches: showing the first '+j.results.length,4500);
+  }
+  catch(e){ toast(e.message,4000); }
+  $('fetchBtn').disabled=false; $('fetchBtn').textContent='Fetch Details';
+}
+const modeHint={exact:'Type or paste one or more barcodes (one per line or comma separated)',contains:'Type part of a barcode, e.g. 004905 (min 3 characters)',starts:'Type the first part of a barcode, e.g. CNUV-00 (min 3 characters)',ends:'Type the last part of a barcode, e.g. 4905 (min 3 characters)'};
+$('dMode').onchange=()=>{ $('dIn').placeholder=modeHint[$('dMode').value]; };
+$('fetchBtn').onclick=()=>{ lookup($('dIn').value.split(/[\s,;]+/), $('dMode').value); $('dIn').value=''; };
+$('camBtn2').onclick=()=>toggleScan($('camBtn2'),'reader2',c=>{ beep(true); lookup([c],'exact'); });
+$('dClear').onclick=()=>{ found.clear(); renderRes(); };
+
+/* ---------- Export to Excel ---------- */
+function stamp(){ const d=new Date(), p=n=>String(n).padStart(2,'0'); return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes()); }
+function downloadXlsx(name, sheet, head, rows, widths){
+  try{
+    if(typeof XLSX==='undefined') throw new Error('xlsx lib missing');
+    const ws=XLSX.utils.aoa_to_sheet([head].concat(rows));
+    ws['!cols']=widths.map(w=>({wch:w}));
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,sheet);
+    XLSX.writeFile(wb,name+'.xlsx'); toast('Excel exported');
+  }catch(e){
+    // fallback: CSV (opens in Excel) if the Excel library could not load
+    const csv='\ufeff'+[head].concat(rows).map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=name+'.csv';
+    document.body.appendChild(a); a.click(); a.remove(); toast('Exported as CSV (Excel library not loaded)',3500);
+  }
+}
+$('exportBtn').onclick=()=>{
+  const arr=[...found.values()]; if(!arr.length){ toast('Nothing to export'); return; }
+  downloadXlsx('Nuvrah_Rack_Details_'+stamp(),'Rack Details',
+    ['SN','Serial Number','Last Date','Rack','Asked By','Scan Time','Scanned By (User)','Status'],
+    arr.map((r,i)=>[i+1, r.code, r.found?r.date:'', r.found?r.rack:'', r.found?r.askedBy:'', r.found?(r.time||''):'', r.found?(r.user||''):'', r.found?'Found':'Not found']),
+    [6,18,12,16,14,12,16,11]);
+};
+
+/* ---------- RACK STORAGE TAB ---------- */
+let stRack='', stItems=[], stLoaded=false;
+const stCombo=makeCombo('stRackIn','stRackList',v=>{
+  stRack=v; stItems=[]; stLoaded=false; renderStorage();
+  if(v) loadStorage();
+});
+async function loadStorage(){
+  if(!stRack){ toast('Select a rack first'); return; }
+  $('stRefresh').disabled=true; $('stCount').textContent='Loading…';
+  const asked=stRack;
+  try{ const j=await api('rackStorage',{rack:asked}); if(asked===stRack){ stItems=j.items; stLoaded=true; } }
+  catch(e){ toast(e.message,4000); }
+  $('stRefresh').disabled=false; renderStorage();
+}
+function renderStorage(){
+  const f=$('stFilter').value.trim().toUpperCase();
+  const list=f ? stItems.filter(x=>x.code.includes(f)||String(x.askedBy).toUpperCase().includes(f)) : stItems;
+  const LIM=1000;
+  $('stCount').innerHTML = stLoaded ? ('<b>'+stItems.length+'</b> barcode(s) in '+esc(stRack)+(f?' &middot; showing '+list.length:'')) : '';
+  $('stBody').innerHTML = list.slice(0,LIM).map((x,i)=>
+    '<tr><td>'+(i+1)+'</td><td><b class="mono">'+esc(x.code)+'</b></td><td>'+esc(x.date)+'<br><span class="mut">'+esc(x.time||'')+'</span></td><td>'+esc(x.askedBy)+'<br><span class="mut">'+esc(x.user||'')+'</span></td></tr>').join('');
+  $('stMore').textContent = list.length>LIM ? 'Showing first '+LIM+' of '+list.length+'. Export includes all.' : '';
+  $('stTable').classList.toggle('hide', !list.length);
+  $('stExport').disabled = !stItems.length;
+}
+$('stFilter').addEventListener('input',renderStorage);
+$('stRefresh').onclick=loadStorage;
+$('stExport').onclick=()=>{
+  if(!stItems.length){ toast('Nothing to export'); return; }
+  downloadXlsx('Nuvrah_Rack_'+stRack.replace(/[^\w-]+/g,'_')+'_'+stamp(),'Rack Storage',
+    ['SN','Serial Number','Rack','Last Date','Scan Time','Asked By','Scanned By (User)'],
+    stItems.map((x,i)=>[i+1, x.code, x.rack, x.date, x.time||'', x.askedBy, x.user||'']),
+    [6,18,16,12,12,14,16]);
+};
+
+/* ---------- USERS TAB (admin) ---------- */
+async function loadUsers(){
+  if(!me||!me.admin) return;
+  try{
+    const u=(await api('listUsers')).users;
+    $('uBody').innerHTML = u.length ? u.map(x=>
+      '<tr><td><b>'+esc(x.username)+'</b><br><span class="pill'+(x.write?'':' off')+'">'+(x.write?'Write':'Read only')+'</span> <span class="pill'+(x.active?'':' off')+'">'+(x.active?'Active':'Disabled')+'</span></td>'+
+      '<td style="text-align:right;white-space:nowrap">'+
+      '<button class="btn sec" style="padding:6px 8px;font-size:13px" data-a="w" data-u="'+esc(x.username)+'" data-v="'+x.write+'">'+(x.write?'Make read-only':'Give write')+'</button> '+
+      '<button class="btn sec" style="padding:6px 8px;font-size:13px" data-a="e" data-u="'+esc(x.username)+'" data-v="'+x.active+'">'+(x.active?'Disable':'Enable')+'</button><br>'+
+      '<button class="btn sec" style="padding:6px 8px;font-size:13px;margin-top:4px" data-a="p" data-u="'+esc(x.username)+'">Reset pwd</button> '+
+      '<button class="btn red" style="padding:6px 8px;font-size:13px;margin-top:4px" data-a="d" data-u="'+esc(x.username)+'">Delete</button></td></tr>'
+    ).join('') : '<tr><td>No users yet</td></tr>';
+  }catch(e){ toast(e.message,4000); }
+}
+$('uBody').onclick=async e=>{
+  const b=e.target.closest('button'); if(!b) return; const u=b.dataset.u, a=b.dataset.a;
+  try{
+    if(a==='w') await api('updateUser',{username:u, write:b.dataset.v!=='true'});
+    else if(a==='e') await api('updateUser',{username:u, active:b.dataset.v!=='true'});
+    else if(a==='p'){ const p=prompt('New password for '+u+':'); if(!p) return; await api('updateUser',{username:u,password:p}); toast('Password updated'); }
+    else if(a==='d'){ if(!confirm('Delete user '+u+'?')) return; await api('deleteUser',{username:u}); }
+    loadUsers();
+  }catch(err){ toast(err.message,4000); }
+};
+$('nuBtn').onclick=async()=>{
+  try{
+    await api('addUser',{username:$('nuName').value, password:$('nuPass').value, write:$('nuWrite').checked});
+    $('nuName').value=''; $('nuPass').value=''; toast('User created'); loadUsers();
+  }catch(e){ toast(e.message,4000); }
+};
+</script>
+</body>
+</html>
