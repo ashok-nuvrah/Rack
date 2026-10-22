@@ -62,6 +62,8 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 4px;border-bottom:1p
 .chk input{width:20px;height:20px}
 .pill{display:inline-block;font-size:12px;padding:2px 8px;border-radius:20px;background:#e6f6ef;color:var(--ok);font-weight:700}
 .pill.off{background:#fde8e6;color:var(--err)}
+.chip{display:inline-flex;align-items:center;gap:6px;background:#e6ecff;color:var(--pri);border-radius:20px;padding:5px 5px 5px 12px;font-weight:700;font-size:14px;margin:8px 6px 0 0}
+.chip button{border:0;background:rgba(11,92,255,.15);color:var(--pri);border-radius:50%;width:22px;height:22px;line-height:1;font-size:15px;padding:0}
 .mono{font-family:ui-monospace,Menlo,monospace}
 .mut{color:var(--mut);font-size:12px}
 #stTable th{font-size:12px;color:var(--mut);text-transform:uppercase}
@@ -74,9 +76,9 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 4px;border-bottom:1p
   <div class="card">
     <h1>Nuvrah Stock-Scan</h1>
     <div class="hint" style="margin:0 0 16px">Sign in to continue</div>
-    <label>Username</label><input type="text" id="lu" autocapitalize="none" autocomplete="username">
+    <label>Username</label><input type="text" id="lu" autocapitalize="none" autocomplete="off">
     <div class="gap"></div>
-    <label>Password</label><input type="password" id="lp" autocomplete="current-password">
+    <label>Password</label><input type="password" id="lp" autocomplete="new-password">
     <div class="gap"></div>
     <button class="btn full" id="lbtn">Login</button>
     <div class="err" id="lerr"></div>
@@ -165,12 +167,17 @@ table{width:100%;border-collapse:collapse}td,th{padding:8px 4px;border-bottom:1p
     <!-- STORAGE TAB -->
     <section id="p-storage" class="hide">
       <div class="card">
-        <label>Rack Number</label>
+        <label>Rack Number(s)</label>
         <div class="combo">
-          <input type="text" id="stRackIn" placeholder="Search / select rack" autocomplete="off">
+          <input type="text" id="stRackIn" placeholder="Search &amp; pick one or more racks" autocomplete="off">
           <ul id="stRackList" class="hide"></ul>
         </div>
-        <div class="hint">Shows every barcode whose latest scan is in this rack.</div>
+        <div id="stChips"></div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn sec" id="stSelAll">☑ Select all racks</button>
+          <button class="btn red fit" id="stClear">Clear</button>
+        </div>
+        <div class="hint">Shows every barcode whose latest scan is in any of the selected racks.</div>
         <div class="gap"></div>
         <input type="text" id="stFilter" placeholder="Filter results (barcode / asked by)" autocomplete="off">
         <div class="gap"></div>
@@ -226,18 +233,41 @@ if(!API_URL){
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let token = localStorage.getItem('rs_tok') || '';
+let token = '';
+try{ localStorage.removeItem('rs_tok'); }catch(e){}   // sessions are never kept: login is required every time the page is opened
 let me = null, racks = [];
 let rack = '', codes = [];
 
 /* ---------- helpers ---------- */
 function toast(msg, ms=2200){ const t=$('toast'); t.textContent=msg; t.classList.remove('hide'); clearTimeout(toast.t); toast.t=setTimeout(()=>t.classList.add('hide'),ms); }
 let actx;
-function beep(ok=true){
-  try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)();
-    const o=actx.createOscillator(), g=actx.createGain(); o.connect(g); g.connect(actx.destination);
-    o.frequency.value = ok?1000:300; g.gain.value=.15; o.start(); o.stop(actx.currentTime+(ok?.08:.4));
-    if(!ok && navigator.vibrate) navigator.vibrate([200,80,200]); }catch(e){}
+function unlockAudio(){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended') actx.resume(); }catch(e){} }
+['click','touchstart','keydown'].forEach(ev=>document.addEventListener(ev,unlockAudio,{passive:true}));
+function tone(freq,dur,type,vol,delay){
+  try{
+    const t0=actx.currentTime+(delay||0), o=actx.createOscillator(), g=actx.createGain();
+    o.type=type; o.frequency.value=freq; o.connect(g); g.connect(actx.destination);
+    g.gain.setValueAtTime(vol,t0); g.gain.exponentialRampToValueAtTime(0.001,t0+dur);
+    o.start(t0); o.stop(t0+dur+0.02);
+  }catch(e){}
+}
+function speak(text){
+  try{
+    if(!window.speechSynthesis) return;
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text); u.lang='en-IN'; u.rate=1; u.volume=1; speechSynthesis.speak(u);
+  }catch(e){}
+}
+// beep(true) = scan captured | beep('dup') = "Duplicate value" error sound + voice | beep(false) = generic error
+function beep(kind){
+  unlockAudio();
+  if(kind===true||kind===undefined||kind==='ok'){
+    if(actx) tone(1400,0.14,'square',0.3);
+    return;
+  }
+  if(actx){ tone(260,0.2,'sawtooth',0.4); tone(180,0.35,'sawtooth',0.4,0.22); }
+  if(navigator.vibrate) navigator.vibrate([200,80,200]);
+  if(kind==='dup') setTimeout(()=>speak('Duplicate value'),450);
 }
 function norm(c){ return String(c||'').trim().toUpperCase(); }
 async function api(action, data={}){
@@ -258,15 +288,17 @@ $('lbtn').onclick = async () => {
   $('lerr').textContent=''; $('lbtn').disabled=true;
   try{
     const j = await api('login',{username:$('lu').value, password:$('lp').value});
-    token=j.token; localStorage.setItem('rs_tok',token); me=j.user; await startApp();
+    token=j.token; me=j.user; await startApp();
     toast('Welcome, '+me.username);
   }catch(e){ $('lerr').textContent=e.message; }
   $('lbtn').disabled=false;
 };
 $('lp').addEventListener('keydown',e=>{ if(e.key==='Enter') $('lbtn').click(); });
 function doLogout(silent){
-  stopScan(); token=''; localStorage.removeItem('rs_tok'); me=null; codes=[]; rack=''; renderCodes(); scanCombo.set(''); stCombo.set(''); stRack=''; stItems=[]; renderStorage();
-  $('app').classList.add('hide'); $('login').classList.remove('hide'); $('lp').value='';
+  stopScan();
+  if(token && API_URL){ fetch(API_URL,{method:'POST',body:JSON.stringify({action:'logout',token})}).catch(()=>{}); }
+  token=''; me=null; codes=[]; rack=''; renderCodes(); scanCombo.set(''); stCombo.set(''); stRacks=[]; stItems=[]; stLoaded=false; renderStorage();
+  $('app').classList.add('hide'); $('login').classList.remove('hide'); $('lp').value=''; $('lu').value='';
   if(silent!==true) toast('Logged out');
 }
 $('logout').onclick = () => doLogout();
@@ -280,7 +312,6 @@ async function startApp(){
   showTab(me.write ? 'scan' : 'details');
   if(me.admin) loadUsers();
 }
-(async()=>{ if(token && API_URL){ try{ me=(await api('me')).user; await startApp(); }catch(e){} } })();
 
 /* ---------- tabs ---------- */
 function showTab(t){
@@ -330,7 +361,7 @@ async function toggleScan(btn, readerId, cb){
 }
 
 /* ---------- SCAN TAB: rack dropdown with search ---------- */
-function makeCombo(inpId, ulId, onChange){
+function makeCombo(inpId, ulId, onChange, multi){
   const inp=$(inpId), ul=$(ulId); let val='';
   function render(){
     const q=inp.value.trim().toLowerCase();
@@ -339,10 +370,12 @@ function makeCombo(inpId, ulId, onChange){
     ul.classList.remove('hide');
   }
   inp.addEventListener('focus',()=>{ inp.select(); render(); });
-  inp.addEventListener('input',()=>{ if(val){ val=''; onChange(''); } render(); });
+  inp.addEventListener('input',()=>{ if(val && !multi){ val=''; onChange(''); } render(); });
   ul.addEventListener('click',e=>{
     const li=e.target.closest('li'); if(!li||!li.dataset.v) return;
-    val=li.dataset.v; inp.value=val; ul.classList.add('hide'); onChange(val);
+    ul.classList.add('hide');
+    if(multi){ inp.value=''; onChange(li.dataset.v); return; }
+    val=li.dataset.v; inp.value=val; onChange(val);
   });
   document.addEventListener('click',e=>{ if(!inp.parentElement.contains(e.target)){ ul.classList.add('hide'); inp.value=val; } });
   return { get:()=>val, set:v=>{ val=v; inp.value=v; } };
@@ -386,7 +419,7 @@ function addCode(raw, noSplit){
   }
   renderCodes();
   if(dupSet.size){
-    beep(false);
+    beep('dup');
     const d=[...dupSet];
     if(list.length===1){
       const m=modal('<h2>Repeat code</h2><div class="code">'+esc(d[0])+'</div><button class="btn full" id="dupOk">OK</button>','dup');
@@ -522,27 +555,48 @@ $('exportBtn').onclick=()=>{
     [6,18,12,16,14,12,16,11]);
 };
 
-/* ---------- RACK STORAGE TAB ---------- */
-let stRack='', stItems=[], stLoaded=false;
+/* ---------- RACK STORAGE TAB (multi-rack + select all) ---------- */
+let stRacks=[], stAll=false, stItems=[], stLoaded=false, stSeq=0;
 const stCombo=makeCombo('stRackIn','stRackList',v=>{
-  stRack=v; stItems=[]; stLoaded=false; renderStorage();
-  if(v) loadStorage();
-});
+  if(!v) return;
+  if(stAll){ toast('All racks are already selected'); return; }
+  if(stRacks.includes(v)) return;
+  stRacks.push(v); loadStorage();
+},true);
+function stReset(){ stAll=false; stRacks=[]; stItems=[]; stLoaded=false; stSeq++; $('stRefresh').disabled=false; renderStorage(); }
+$('stSelAll').onclick=()=>{ stAll=true; stRacks=[]; loadStorage(); };
+$('stClear').onclick=stReset;
+$('stChips').onclick=e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  if(b.dataset.r==='*'){ stReset(); return; }
+  stRacks=stRacks.filter(r=>r!==b.dataset.r);
+  if(stRacks.length) loadStorage(); else stReset();
+};
 async function loadStorage(){
-  if(!stRack){ toast('Select a rack first'); return; }
-  $('stRefresh').disabled=true; $('stCount').textContent='Loading…';
-  const asked=stRack;
-  try{ const j=await api('rackStorage',{rack:asked}); if(asked===stRack){ stItems=j.items; stLoaded=true; } }
-  catch(e){ toast(e.message,4000); }
-  $('stRefresh').disabled=false; renderStorage();
+  if(!stAll && !stRacks.length){ toast('Select a rack first'); return; }
+  const seq=++stSeq;
+  $('stRefresh').disabled=true; $('stCount').textContent='Loading…'; renderChips();
+  try{ const j=await api('rackStorage', stAll?{all:true}:{racks:stRacks}); if(seq===stSeq){ stItems=j.items; stLoaded=true; } }
+  catch(e){ if(seq===stSeq) toast(e.message,4000); }
+  if(seq===stSeq){ $('stRefresh').disabled=false; renderStorage(); }
+}
+function renderChips(){
+  if(stAll){
+    $('stChips').innerHTML='<span class="chip">All racks'+(stLoaded?' ('+stItems.length+')':'')+'<button data-r="*" aria-label="Clear">×</button></span>';
+    return;
+  }
+  const cnt={}; stItems.forEach(x=>{ const k=String(x.rack).trim().toLowerCase(); cnt[k]=(cnt[k]||0)+1; });
+  $('stChips').innerHTML = stRacks.map(r=>'<span class="chip">'+esc(r)+(stLoaded?' ('+(cnt[r.toLowerCase()]||0)+')':'')+'<button data-r="'+esc(r)+'" aria-label="Remove">×</button></span>').join('');
 }
 function renderStorage(){
+  renderChips();
   const f=$('stFilter').value.trim().toUpperCase();
-  const list=f ? stItems.filter(x=>x.code.includes(f)||String(x.askedBy).toUpperCase().includes(f)) : stItems;
+  const list=f ? stItems.filter(x=>x.code.includes(f)||String(x.askedBy).toUpperCase().includes(f)||String(x.rack).toUpperCase().includes(f)) : stItems;
   const LIM=1000;
-  $('stCount').innerHTML = stLoaded ? ('<b>'+stItems.length+'</b> barcode(s) in '+esc(stRack)+(f?' &middot; showing '+list.length:'')) : '';
+  const nRacks = stAll ? new Set(stItems.map(x=>String(x.rack).trim().toLowerCase())).size : stRacks.length;
+  $('stCount').innerHTML = stLoaded ? ('<b>'+stItems.length+'</b> barcode(s) in '+(stAll?'all racks ('+nRacks+' with stock)':nRacks+' rack(s)')+(f?' &middot; showing '+list.length:'')) : '';
   $('stBody').innerHTML = list.slice(0,LIM).map((x,i)=>
-    '<tr><td>'+(i+1)+'</td><td><b class="mono">'+esc(x.code)+'</b></td><td>'+esc(x.date)+'<br><span class="mut">'+esc(x.time||'')+'</span></td><td>'+esc(x.askedBy)+'<br><span class="mut">'+esc(x.user||'')+'</span></td></tr>').join('');
+    '<tr><td>'+(i+1)+'</td><td><b class="mono">'+esc(x.code)+'</b><br><span class="mut">'+esc(x.rack)+'</span></td><td>'+esc(x.date)+'<br><span class="mut">'+esc(x.time||'')+'</span></td><td>'+esc(x.askedBy)+'<br><span class="mut">'+esc(x.user||'')+'</span></td></tr>').join('');
   $('stMore').textContent = list.length>LIM ? 'Showing first '+LIM+' of '+list.length+'. Export includes all.' : '';
   $('stTable').classList.toggle('hide', !list.length);
   $('stExport').disabled = !stItems.length;
@@ -551,7 +605,8 @@ $('stFilter').addEventListener('input',renderStorage);
 $('stRefresh').onclick=loadStorage;
 $('stExport').onclick=()=>{
   if(!stItems.length){ toast('Nothing to export'); return; }
-  downloadXlsx('Nuvrah_Rack_'+stRack.replace(/[^\w-]+/g,'_')+'_'+stamp(),'Rack Storage',
+  const tag = stAll ? 'All_Racks' : (stRacks.length===1 ? stRacks[0].replace(/[^\w-]+/g,'_') : stRacks.length+'_Racks');
+  downloadXlsx('Nuvrah_Rack_'+tag+'_'+stamp(),'Rack Storage',
     ['SN','Serial Number','Rack','Last Date','Scan Time','Asked By','Scanned By (User)'],
     stItems.map((x,i)=>[i+1, x.code, x.rack, x.date, x.time||'', x.askedBy, x.user||'']),
     [6,18,16,12,12,14,16]);
